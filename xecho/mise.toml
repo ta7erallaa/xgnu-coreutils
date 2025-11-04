@@ -1,0 +1,46 @@
+[vars]
+BUILD_DIR = "bin"
+BINARY_NAME = "xecho"
+VERSION = "V1.0.0"
+BUILD_FLAG = '-ldflags="-s -w -X main.Version={{vars.VERSION}}"'
+GO = "go"
+GOFLAGS = "-ldflags='-s -w'"
+MY_INSTALL_DIR = "${HOME}/mybin"
+
+[tasks.build]
+description = "Build {{vars.BINARY_NAME}} app"
+alias = "b"
+shell = "bash -c"
+run = """
+echo "Start building {{vars.BINARY_NAME}}"
+mkdir -p {{vars.BUILD_DIR}}
+{{vars.GO}} build {{vars.GOFLAGS}} -o {{vars.BUILD_DIR}}/{{vars.BINARY_NAME}} main.go
+echo "End building {{vars.BINARY_NAME}}"
+"""
+sources = ["go.mod", "*.go"]
+outputs = ["{{vars.BUILD_DIR}}/{{vars.BINARY_NAME}}"]
+quiet = false
+
+[tasks.install]
+description = "Install {{vars.BINARY_NAME}} app"
+alias = "i"
+shell = "bash -c"
+run = """
+echo "Start install {{vars.BINARY_NAME}}..."
+cp {{vars.BUILD_DIR}}/{{vars.BINARY_NAME}} {{vars.MY_INSTALL_DIR}}
+echo "End install {{vars.BINARY_NAME}}..."
+"""
+depends = ["build"]
+quiet = false
+
+[tasks.clean]
+description = "Cleaning {{ vars.BINARY_NAME }} app"
+alias = "c"
+shell = "bash -c"
+run = """
+echo "Start cleaning"
+rm -rf {{vars.BUILD_DIR}}
+rm -rf {{vars.MY_INSTALL_DIR}}/{{vars.BINARY_NAME}}
+echo "End cleaning"
+"""
+quiet = false
