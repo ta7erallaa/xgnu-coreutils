@@ -5,85 +5,88 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
-type FileReadResult struct {
-	filename string
-	content  []byte
-	err      error
-}
-
-func (f FileReadResult) String() string {
-	var b strings.Builder
-
-	b.WriteString(strings.Repeat("-", 10))
-	b.WriteString(f.filename)
-	b.WriteString(strings.Repeat("-", 10))
-	b.WriteByte('\n')
-	b.Write(f.content)
-
-	return b.String()
-}
-
-func (f *FileReadResult) Write(p []byte) (n int, err error) {
-	f.content = p
-	return len(p), nil
-}
-
 func main() {
-	signChan := make(chan os.Signal, 1)
-
-	signal.Notify(signChan, syscall.SIGINT)
-	go handleSignal(signChan)
+	showNumbers := flag.Bool("n", false, "Show line numbers")
+	showNumbersNonblank := flag.Bool("b", false, "Number nonempty")
 
 	flag.Parse()
 	files := flag.Args()
 
+	// read from stdin
 	if len(files) == 0 {
-		readFromStdin(os.Stdin, os.Stdout)
+		if err := readFromSdtin(); err != nil {
+			log.Fatal(err)
+		}
 		return
 	}
 
-	// Eead from file
-	fileNumbers := len(files)
-
-	fileData := make(chan FileReadResult, fileNumbers)
+	// read from files
+	flgOpt := FlagOpts{showNumbers: *showNumbers, showNumbersNonblank: *showNumbersNonblank}
 
 	for _, file := range files {
-		go func() {
-			content, err := os.ReadFile(file)
-			fileData <- FileReadResult{file, content, err}
-		}()
+		f, err := os.Open(file)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer f.Close()
+
+		xcat(f, os.Stdout, flgOpt)
 	}
+}
 
-	for range fileNumbers {
-		data := <-fileData
+type FlagOpts struct {
+	showNumbers, showNumbersNonblank bool
+}
 
-		if data.err != nil {
-			fmt.Println(data.err)
-			continue
+func xcat(r io.Reader, w io.Writer, flgOpt FlagOpts) {
+	fileReader := bufio.NewReader(r)
+	lineNum := 1
+	for {
+		line, err := fileReader.ReadString('\n')
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			log.Fatal(err)
+		}
+		var formattedLine string
+		formattedLine, lineNum = formatLine(line, lineNum, flgOpt.showNumbers, flgOpt.showNumbersNonblank)
+		fmt.Fprint(w, formattedLine)
+	}
+}
+
+func formatLine(line string, lineNum int, showNumbers, showNumbersNonblank bool) (string, int) {
+
+	if showNumbersNonblank {
+		if line == "\n" {
+			return line, lineNum
 		}
 
-		fmt.Print(data)
+		return fmt.Sprintf("%d %s", lineNum, line), lineNum + 1
 	}
+
+	if showNumbers {
+		return fmt.Sprintf("%d %s", lineNum, line), lineNum + 1
+	}
+
+	return fmt.Sprint(line), lineNum + 1
+
 }
 
-func readFromStdin(in io.Reader, out io.Writer) {
-	input := bufio.NewScanner(in)
-	for input.Scan() {
-		fmt.Fprintln(out, input.Text())
-	}
-}
+func readFromSdtin() error {
+	reader := bufio.NewReader(os.Stdin)
 
-func handleSignal(signChan <-chan os.Signal) {
-	signal := <-signChan
-	switch signal {
-	case syscall.SIGINT:
-		os.Exit(0)
-	default:
+	for {
+		str, err := reader.ReadString('\n')
+		if err != nil {
+			if err != io.EOF {
+				return err
+			}
+		}
+		fmt.Fprint(os.Stdout, str)
 	}
 }
