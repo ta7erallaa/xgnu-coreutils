@@ -9,6 +9,10 @@ import (
 	"os"
 )
 
+type FlagOpts struct {
+	showNumbers, showNumbersNonblank bool
+}
+
 func main() {
 	showNumbers := flag.Bool("n", false, "Show line numbers")
 	showNumbersNonblank := flag.Bool("b", false, "Number nonempty")
@@ -30,29 +34,31 @@ func main() {
 	for _, file := range files {
 		f, err := os.Open(file)
 		if err != nil {
-			log.Fatal(err)
+			fmt.Printf("%v\n\n", err)
+			continue
 		}
 		defer f.Close()
 
-		xcat(f, os.Stdout, flgOpt)
+		err = xcat(f, os.Stdout, flgOpt)
+		if err != nil {
+			if err != io.EOF {
+				fmt.Println(err)
+			}
+			continue
+		}
 	}
 }
 
-type FlagOpts struct {
-	showNumbers, showNumbersNonblank bool
-}
-
-func xcat(r io.Reader, w io.Writer, flgOpt FlagOpts) {
+func xcat(r io.Reader, w io.Writer, flgOpt FlagOpts) error {
 	fileReader := bufio.NewReader(r)
 	lineNum := 1
 	for {
+
 		line, err := fileReader.ReadString('\n')
-		if err == io.EOF {
-			break
-		}
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
+
 		var formattedLine string
 		formattedLine, lineNum = formatLine(line, lineNum, flgOpt.showNumbers, flgOpt.showNumbersNonblank)
 		fmt.Fprint(w, formattedLine)
@@ -73,8 +79,7 @@ func formatLine(line string, lineNum int, showNumbers, showNumbersNonblank bool)
 		return fmt.Sprintf("%d %s", lineNum, line), lineNum + 1
 	}
 
-	return fmt.Sprint(line), lineNum + 1
-
+	return fmt.Sprint(line), lineNum
 }
 
 func readFromSdtin() error {
