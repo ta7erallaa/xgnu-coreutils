@@ -2,9 +2,11 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"os"
 )
@@ -30,11 +32,18 @@ func main() {
 
 	// read from files
 	flgOpt := FlagOpts{showNumbers: *showNumbers, showNumbersNonblank: *showNumbersNonblank}
+	var failedExitCode bool
 
 	for _, file := range files {
 		f, err := os.Open(file)
 		if err != nil {
-			fmt.Printf("%v\n\n", err)
+			if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
+				fmt.Fprintf(os.Stderr, "Error: file '%s' does not exist.\n\n", pathErr.Path)
+			} else {
+				fmt.Fprintf(os.Stderr, "%v\n\n", err)
+			}
+
+			failedExitCode = true
 			continue
 		}
 		defer f.Close()
@@ -46,6 +55,10 @@ func main() {
 			}
 			continue
 		}
+	}
+
+	if failedExitCode {
+		os.Exit(1)
 	}
 }
 
